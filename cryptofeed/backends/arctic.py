@@ -9,8 +9,8 @@ import pandas as pd
 
 from cryptofeed.backends.backend import (BackendFundingCallback, BackendCandlesCallback, BackendOpenInterestCallback,
                                          BackendTickerCallback, BackendTradeCallback, BackendLiquidationsCallback,
-                                         BackendMarketInfoCallback)
-from cryptofeed.defines import CANDLES, FUNDING, OPEN_INTEREST, TICKER, TRADES, LIQUIDATIONS, MARKET_INFO
+                                         BackendMarketInfoCallback, BackendBookCallback)
+from cryptofeed.defines import CANDLES, FUNDING, OPEN_INTEREST, TICKER, TRADES, LIQUIDATIONS, MARKET_INFO, L2_BOOK
 
 
 class ArcticCallback:
@@ -51,6 +51,11 @@ class ArcticCallback:
 class TradeArctic(ArcticCallback, BackendTradeCallback):
     default_key = TRADES
 
+    async def write(self, feed, symbol, timestamp, receipt_timestamp, data):
+        if 'order_type' in data:
+            data['order_type'] = str(data['order_type'])
+        await super().write(feed, symbol, timestamp, receipt_timestamp, data)
+
 
 class FundingArctic(ArcticCallback, BackendFundingCallback):
     default_key = FUNDING
@@ -74,3 +79,4 @@ class MarketInfoArctic(ArcticCallback, BackendMarketInfoCallback):
 
 class CandlesArctic(ArcticCallback, BackendCandlesCallback):
     default_key = CANDLES
+

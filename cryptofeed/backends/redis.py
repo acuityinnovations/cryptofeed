@@ -29,16 +29,30 @@ class RedisCallback(BackendQueue):
         prefix = 'redis://'
         if socket:
             prefix = 'unix://'
-
-        self.redis = aioredis.from_url(f"{prefix}{host}:{port}")
-        self.key = key if key else self.default_key
-        self.numeric_type = numeric_type
-
+        if 'redis_uri' in kwargs.keys():
+            self.redis = aioredis.from_url(kwargs['redis_uri'])
+            self.key = key if key else self.default_key
+            self.numeric_type = numeric_type
+        else:
+            self.redis = aioredis.from_url(f"{prefix}{host}:{port}")
+            self.key = key if key else self.default_key
+            self.numeric_type = numeric_type
 
 class RedisZSetCallback(RedisCallback):
+    def __init__(self, host='127.0.0.1', port=6379, socket=None, key=None, numeric_type=float, score_key='timestamp', **kwargs):
+        """
+        score_key: str
+            the value at this key will be used to store the data in the ZSet in redis. The
+            default is timestamp. If you wish to look up the data by a different value,
+            use this to change it. It must be a numeric value.
+        """
+        self.score_key = score_key
+        super().__init__(host=host, port=port, socket=socket, key=key, numeric_type=numeric_type, **kwargs)
+
     async def write(self, feed: str, symbol: str, timestamp: float, receipt_timestamp: float, data: dict):
+        score = data[self.score_key]
         data = json.dumps(data)
-        await self.queue.put({'feed': feed, 'symbol': symbol, 'timestamp': timestamp, 'data': data})
+        await self.queue.put({'feed': feed, 'symbol': symbol, 'score': score, 'data': data})
 
     async def writer(self):
         while True:
@@ -48,11 +62,11 @@ class RedisZSetCallback(RedisCallback):
                 async with self.read_many_queue(count) as updates:
                     async with self.redis.pipeline(transaction=False) as pipe:
                         for update in updates:
-                            pipe = pipe.zadd(f"{self.key}-{update['feed']}-{update['symbol']}", {update['data']: update['timestamp']}, nx=True)
+                            pipe = pipe.zadd(f"{self.key}-{update['feed']}-{update['symbol']}", {update['data']: update['score']}, nx=True)
                         await pipe.execute()
             else:
                 async with self.read_queue() as update:
-                    await self.redis.zadd(f"{self.key}-{update['feed']}-{update['symbol']}", {update['data']: update['timestamp']}, nx=True)
+                    await self.redis.zadd(f"{self.key}-{update['feed']}-{update['symbol']}", {update['data']: update['score']}, nx=True)
 
 
 class RedisStreamCallback(RedisCallback):
